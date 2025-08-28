@@ -379,5 +379,12 @@ footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
     <div><label>ZIP</label><input id="b_zip" placeholder="20774"></div>
     <div><label>Beds</label><input id="b_beds" type="number" m_
 
+</script>
+</body></html>
+"""
+
+@app.get("/", response_class=HTMLResponse)
 def index():
-    return HTML
+    head = analytics_snippets()
+    return HTML.replace("</head>", head + "\n</head>") if head else HTML
+
