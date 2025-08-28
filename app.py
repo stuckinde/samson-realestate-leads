@@ -1,10 +1,9 @@
 # app.py — Samson Properties (PG County) one-file MVP
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from sqlmodel import SQLModel, Field, Session, create_engine, select
 from typing import Optional
 from datetime import datetime
-import json
 
 app = FastAPI(title="Samson Properties Lead-Gen", version="1.0")
 
@@ -12,7 +11,7 @@ app = FastAPI(title="Samson Properties Lead-Gen", version="1.0")
 engine = create_engine("sqlite:///app.db", echo=False)
 
 class LeadBase(SQLModel):
-    role: str                       # "seller" or "buyer"
+    role: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None
@@ -24,9 +23,9 @@ class LeadBase(SQLModel):
     sqft: Optional[int] = None
     price_min: Optional[int] = None
     price_max: Optional[int] = None
-    timeline: Optional[str] = None  # "0-3","3-6","6-12","12+"
+    timeline: Optional[str] = None
     tags: Optional[str] = None
-    stage: str = "New"              # pipeline stage
+    stage: str = "New"
     consent_sms: bool = False
     consent_email: bool = False
     score: int = 0
@@ -236,7 +235,6 @@ footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
 </div>
 
 <script>
-// tabs
 document.querySelectorAll('.tab').forEach(b=>{
   b.addEventListener('click',()=>{
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -245,10 +243,10 @@ document.querySelectorAll('.tab').forEach(b=>{
     if (b.dataset.tab==='dash') loadLeads();
   });
 });
-
 async function post(url,data){ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); if(!r.ok) throw new Error('req failed'); return r.json(); }
 async function patch(url,data){ const r=await fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); if(!r.ok) throw new Error('req failed'); return r.json(); }
-
+function val(id){return document.getElementById(id).value}
+function num(id){const v=val(id); return v?Number(v):null}
 async function doVal(){
   const payload={zip_code:val('s_zip'), beds:num('s_beds'), baths:num('s_baths'), sqft:num('s_sqft')};
   const out=document.getElementById('val_out'); out.textContent='...';
@@ -257,29 +255,18 @@ async function doVal(){
     <span class="tag">Using $${v.ppsf_used}/sqft × ${v.sqft_used} sqft (adj ${v.adjustment}).</span>`;
   }catch(e){ out.textContent='Could not compute estimate'; }
 }
-function val(id){return document.getElementById(id).value}
-function num(id){const v=val(id); return v?Number(v):null}
-
 async function submitSeller(){
-  const payload={
-    role:'seller', first_name:val('s_fn'), last_name:val('s_ln'),
-    email:val('s_email'), phone:val('s_phone'), address:val('s_addr'), zip_code:val('s_zip'),
-    beds:num('s_beds'), baths:num('s_baths'), sqft:num('s_sqft'),
-    timeline:val('s_tl'), consent_sms:document.getElementById('s_sms').checked, consent_email:document.getElementById('s_em').checked
-  };
+  const payload={role:'seller', first_name:val('s_fn'), last_name:val('s_ln'), email:val('s_email'), phone:val('s_phone'),
+    address:val('s_addr'), zip_code:val('s_zip'), beds:num('s_beds'), baths:num('s_baths'), sqft:num('s_sqft'),
+    timeline:val('s_tl'), consent_sms:document.getElementById('s_sms').checked, consent_email:document.getElementById('s_em').checked};
   try{ await post('/api/leads',payload); alert('Thanks! We will contact you shortly.'); } catch(e){ alert('Could not submit.'); }
 }
-
 async function submitBuyer(){
-  const payload={
-    role:'buyer', first_name:val('b_fn'), last_name:val('b_ln'),
-    email:val('b_email'), phone:val('b_phone'), zip_code:val('b_zip'),
-    beds:num('b_beds'), baths:num('b_baths'), price_min:num('b_min'), price_max:num('b_max'),
-    timeline:val('b_tl'), consent_sms:document.getElementById('b_sms').checked, consent_email:document.getElementById('b_em').checked
-  };
+  const payload={role:'buyer', first_name:val('b_fn'), last_name:val('b_ln'), email:val('b_email'), phone:val('b_phone'),
+    zip_code:val('b_zip'), beds:num('b_beds'), baths:num('b_baths'), price_min:num('b_min'), price_max:num('b_max'),
+    timeline:val('b_tl'), consent_sms:document.getElementById('b_sms').checked, consent_email:document.getElementById('b_em').checked};
   try{ await post('/api/leads',payload); alert('Saved! We’ll send property alerts (demo).'); } catch(e){ alert('Could not submit.'); }
 }
-
 async function loadLeads(){
   const p=new URLSearchParams(); if(val('q')) p.set('q',val('q')); if(val('r')) p.set('role',val('r')); if(val('st')) p.set('stage',val('st'));
   const r=await fetch('/api/leads?'+p.toString()); const d=await r.json(); const T=document.getElementById('tbl');
