@@ -244,158 +244,266 @@ def admin_set_ppsf_bulk(items: List[dict], x_admin_key: Optional[str] = Header(N
 
 # ---- UI ----
 HTML = """<!doctype html>
-<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Samson Properties • MD Home Values & Leads</title>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Samson Properties • Southern Maryland Home Values</title>
+<meta name="description" content="Instant home value estimates, buyer intake, and a simple CRM for Samson Properties in PG, Calvert, St. Mary’s, Charles, Anne Arundel, Montgomery, and Howard counties.">
 <style>
-body{font-family:Inter,system-ui,Arial;margin:0;background:#0b1020;color:#f5f7ff}
-.container{max-width:960px;margin:0 auto;padding:20px}
-.card{background:#111a3a;border:1px solid #283469;border-radius:14px;padding:14px;margin:12px 0}
-input,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid #283469;background:#0f1733;color:#fff}
-button{cursor:pointer;background:linear-gradient(90deg,#c9a227,#7fb4ff);color:#0b1020;font-weight:600;border:none}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.tab{border:1px solid #283469;background:#0f1733;border-radius:10px;padding:8px 12px;color:#fff;cursor:pointer}
-.tab.active,.tab:hover{background:#1a2550}
-.tabs{display:flex;gap:8px;margin:10px 0}
-.hidden{display:none}
+:root{
+  --bg:#0a0f1f; --bg2:#0b1230; --card:#0f1838; --muted:#a8b1c4; --text:#f4f7ff;
+  --brand:#ffd86b; --accent:#7fb4ff; --line:#2b3a73; --ok:#11c991;
+}
+*{box-sizing:border-box} body{margin:0;background:
+  radial-gradient(1200px 800px at 20% -10%, #1a2a6c 0%, #090e20 55%),
+  linear-gradient(180deg, var(--bg2), var(--bg)); color:var(--text); font-family:Inter,system-ui,Arial}
+a{color:inherit}
+.container{max-width:1100px;margin:0 auto;padding:24px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;border-radius:10px;
+  background:conic-gradient(from 210deg,#ffe38f, #ffc83d 45%, #6db6ff 75%, #ffe38f);
+  display:flex;align-items:center;justify-content:center;color:#0b0f1a;font-weight:800;
+  box-shadow:0 8px 26px rgba(255,216,107,.35)}
+.h1{font-size:26px;margin:0}
+.sub{color:var(--muted);font-size:13px}
+
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:stretch;margin-top:18px}
+.heroCard{background:linear-gradient(180deg,#111a3f,#0b1330);
+  border:1px solid var(--line); border-radius:18px; padding:18px; box-shadow:0 12px 34px rgba(0,0,0,.35)}
+.heroCard h2{margin:0 0 10px; font-size:28px}
+.bullets{margin:10px 0 0 18px; color:var(--muted)}
+.ctas{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.btn{background:linear-gradient(90deg,var(--brand),var(--accent)); color:#0b1020; font-weight:700;
+  border:none; border-radius:12px; padding:10px 16px; cursor:pointer}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr); gap:10px; margin-top:10px}
+.kpi{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.kpi b{font-size:20px}
+
+.card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 8px 28px rgba(0,0,0,.25); margin:14px 0}
+.tabs{display:flex;gap:10px;margin:16px 0 8px}
+.tab{background:transparent;border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:10px;cursor:pointer}
+.tab.active,.tab:hover{background:#182457}
+
+.formGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.formGrid .full{grid-column:1/-1}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+input,select,button,textarea{width:100%;padding:11px;border-radius:10px;border:1px solid var(--line);background:#0f1733;color:var(--text)}
+select,button{cursor:pointer}
+button.primary{background:linear-gradient(90deg,var(--brand),var(--accent)); color:#0b1020; font-weight:600; border:none}
+.help{color:var(--muted);font-size:13px}
+.mono{font-family:ui-monospace, Menlo, Consolas, monospace}
+
 .table{width:100%;border-collapse:collapse}
-.table th,.table td{border-bottom:1px solid #283469;padding:8px;text-align:left}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#273165}
-</style></head>
-<body><div class="container">
-<h2>Samson Properties — Southern Maryland</h2>
-<div class="card">
-  <h3>How much is my home worth?</h3>
-  <div style="display:flex; gap:8px; flex-wrap:wrap">
-    <input id="hero_addr" placeholder="Enter your address" style="flex:1; min-width:220px">
-    <input id="hero_zip" placeholder="ZIP" style="width:120px">
-    <select id="hero_county" style="width:220px">
-      <option value="">County…</option>
-      <option>Prince George’s</option><option>Calvert</option><option>St. Mary's</option>
-      <option>Charles</option><option>Anne Arundel</option><option>Montgomery</option><option>Howard</option>
-    </select>
-    <button onclick="heroStart()">Get started</button>
-  </div>
-  <div id="hero_result" style="margin-top:8px;color:#a9b4c9"></div>
-</div>
+.table th,.table td{border-bottom:1px solid var(--line);padding:8px;text-align:left;font-size:14px}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#273165;color:var(--text);font-size:12px}
 
-<div class="tabs">
-  <button class="tab active" data-tab="sell">Sell</button>
-  <button class="tab" data-tab="buy">Buy</button>
-  <button class="tab admin-tab hidden" data-tab="dash">Dashboard</button>
-  <button class="tab admin-tab hidden" data-tab="admin">Admin</button>
-</div>
+.trust{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;color:var(--muted)}
+.trust .chip{border:1px dashed var(--line); padding:6px 10px; border-radius:999px; font-size:12px}
 
-<section id="sell" class="">
-  <div class="card">
-    <div class="grid">
-      <div><input id="s_addr" placeholder="Address"></div>
-      <div><input id="s_zip" placeholder="ZIP"></div>
+.footer{margin-top:24px;color:var(--muted);font-size:12px;text-align:center}
+.hidden{display:none}
+
+@media (max-width:920px){ .hero{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="brand">
+      <div class="logo">SP</div>
       <div>
-        <select id="s_county">
-          <option value="">County…</option>
-          <option>Prince George’s</option><option>Calvert</option><option>St. Mary's</option>
-          <option>Charles</option><option>Anne Arundel</option><option>Montgomery</option><option>Howard</option>
-        </select>
+        <h1 class="h1">Samson Properties — Southern Maryland</h1>
+        <div class="sub">PG • Calvert • St. Mary’s • Charles • Anne Arundel • Montgomery • Howard</div>
       </div>
-      <div><input id="s_beds" type="number" placeholder="Beds"></div>
-      <div><input id="s_baths" type="number" step="0.5" placeholder="Baths"></div>
-      <div><input id="s_sqft" type="number" placeholder="Sq Ft"></div>
-      <div>
-        <select id="s_cond"><option value="">Condition…</option><option>Needs work</option><option>Average</option><option>Updated</option><option>Renovated</option></select>
+    </div>
+  </div>
+
+  <section class="hero">
+    <div class="heroCard">
+      <h2>What’s your home really worth today?</h2>
+      <p class="help">Instant estimate with local ZIP $/sqft and condition adjustments—no obligation.</p>
+      <ul class="bullets">
+        <li>ZIP-level comps + condition factor</li>
+        <li>Clear range with explainers</li>
+        <li>Free in-person pricing review after submit</li>
+      </ul>
+      <div class="ctas">
+        <button class="btn" onclick="openTab('sell')">Get My Home Value</button>
+        <button class="btn" onclick="openTab('buy')">Find Homes</button>
       </div>
-      <div class="grid" style="grid-column:1/-1"><button onclick="doVal()">Get Instant Estimate</button></div>
-    </div>
-    <div id="val_out" style="margin-top:8px;color:#a9b4c9"></div>
-  </div>
-
-  <div class="card grid">
-    <input type="hidden" id="s_role" value="seller"/>
-    <div><input id="s_fn" placeholder="First name"></div>
-    <div><input id="s_ln" placeholder="Last name"></div>
-    <div><input id="s_email" type="email" placeholder="Email"></div>
-    <div><input id="s_phone" placeholder="Phone"></div>
-    <div>
-      <select id="s_tl"><option value="">Timeline…</option><option>0-3</option><option>3-6</option><option>6-12</option><option>12+</option></select>
-    </div>
-    <div style="grid-column:1/-1">
-      <label><input type="checkbox" id="s_sms"> SMS OK</label> ·
-      <label><input type="checkbox" id="s_em" checked> Email OK</label>
-    </div>
-    <div style="grid-column:1/-1"><button onclick="submitSeller()">Request In-Person Valuation</button></div>
-  </div>
-</section>
-
-<section id="buy" class="hidden">
-  <div class="card grid">
-    <input type="hidden" id="b_role" value="buyer"/>
-    <div><input id="b_zip" placeholder="ZIP"></div>
-    <div>
-      <select id="b_county">
-        <option value="">County…</option>
-        <option>Prince George’s</option><option>Calvert</option><option>St. Mary's</option>
-        <option>Charles</option><option>Anne Arundel</option><option>Montgomery</option><option>Howard</option>
-      </select>
-    </div>
-    <div><input id="b_beds" type="number" placeholder="Beds"></div>
-    <div><input id="b_baths" type="number" step="0.5" placeholder="Baths"></div>
-    <div><input id="b_min" type="number" placeholder="Price Min"></div>
-    <div><input id="b_max" type="number" placeholder="Price Max"></div>
-    <div><input id="b_fn" placeholder="First name"></div>
-    <div><input id="b_ln" placeholder="Last name"></div>
-    <div><input id="b_email" type="email" placeholder="Email"></div>
-    <div><input id="b_phone" placeholder="Phone"></div>
-    <div>
-      <select id="b_tl"><option value="">Timeline…</option><option>0-3</option><option>3-6</option><option>6-12</option><option>12+</option></select>
-    </div>
-    <div style="grid-column:1/-1">
-      <label><input type="checkbox" id="b_sms"> SMS OK</label> ·
-      <label><input type="checkbox" id="b_em" checked> Email OK</label>
-    </div>
-    <div style="grid-column:1/-1"><button onclick="submitBuyer()">Create Saved Search</button></div>
-  </div>
-</section>
-
-<section id="dash" class="hidden">
-  <div class="card">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      <input id="q" placeholder="Search…"/>
-      <select id="r"><option value="">All</option><option>seller</option><option>buyer</option></select>
-      <select id="st"><option value="">All Stages</option><option>New</option><option>Contacted</option><option>Qualified</option><option>Appointment</option><option>Agreement</option><option>Closed/Lost</option></select>
-      <button onclick="loadLeads()">Refresh</button>
-    </div>
-    <div id="tbl"></div>
-  </div>
-</section>
-
-<section id="admin" class="hidden">
-  <div class="card">
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-      <input id="azip" placeholder="ZIP (5 digits)">
-      <input id="apps" type="number" step="1" placeholder="$/sqft">
-      <button onclick="savePPSF()">Save ZIP</button>
-      <div style="grid-column:1/-1">
-        <textarea id="bulk" rows="6" style="width:100%;background:#0f1733;color:#fff;border:1px solid #283469;border-radius:10px" placeholder='[{"zip":"20774","ppsf":270}]'></textarea>
-        <button onclick="bulkPPSF()">Import Bulk</button>
+      <div class="kpis">
+        <div class="kpi"><b>24h</b><div class="help">Avg. response</div></div>
+        <div class="kpi"><b>97%</b><div class="help">5★ client reviews</div></div>
+        <div class="kpi"><b>$</b><div class="help">Local expert agents</div></div>
       </div>
-      <div id="ppsf_table" style="grid-column:1/-1"></div>
+      <div class="trust">
+        <div class="chip">Equal Housing Opportunity</div>
+        <div class="chip">REALTOR®</div>
+        <div class="chip">Privacy-first form</div>
+      </div>
     </div>
-  </div>
-</section>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px">Quick check</h3>
+      <div class="formGrid">
+        <div class="full"><label>Address</label><input id="hero_addr" placeholder="123 Main St"></div>
+        <div><label>ZIP</label><input id="hero_zip" placeholder="20774"></div>
+        <div>
+          <label>County</label>
+          <select id="hero_county">
+            <option value="">Select…</option>
+            <option>Prince George’s</option><option>Calvert</option><option>St. Mary's</option>
+            <option>Charles</option><option>Anne Arundel</option><option>Montgomery</option><option>Howard</option>
+          </select>
+        </div>
+        <div class="full"><button class="primary" onclick="heroStart()">Get started</button></div>
+      </div>
+      <div id="hero_result" class="help" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Primary">
+    <button class="tab active" data-tab="sell" onclick="openTab('sell')">Sell</button>
+    <button class="tab" data-tab="buy" onclick="openTab('buy')">Buy</button>
+    <button class="tab admin-tab hidden" data-tab="dash" onclick="openTab('dash')">Dashboard</button>
+    <button class="tab admin-tab hidden" data-tab="admin" onclick="openTab('admin')">Admin</button>
+  </nav>
+
+  <!-- SELL -->
+  <section id="sell" class="">
+    <div class="card">
+      <h3 style="margin-top:0">What’s My Home Worth?</h3>
+      <div class="formGrid">
+        <div><label>Address</label><input id="s_addr" placeholder="123 Main St"></div>
+        <div><label>ZIP</label><input id="s_zip" placeholder="20774"></div>
+        <div>
+          <label>County</label>
+          <select id="s_county">
+            <option value="">Select…</option>
+            <option>Prince George’s</option><option>Calvert</option><option>St. Mary's</option>
+            <option>Charles</option><option>Anne Arundel</option><option>Montgomery</option><option>Howard</option>
+          </select>
+        </div>
+        <div><label>Beds</label><input id="s_beds" type="number" min="0" step="1"></div>
+        <div><label>Baths</label><input id="s_baths" type="number" min="0" step="0.5"></div>
+        <div><label>Sq Ft</label><input id="s_sqft" type="number" min="300" step="10"></div>
+        <div>
+          <label>Condition</label>
+          <select id="s_cond">
+            <option value="">Select…</option>
+            <option>Needs work</option><option>Average</option><option>Updated</option><option>Renovated</option>
+          </select>
+        </div>
+        <div class="full"><button class="primary" onclick="doVal()">Get Instant Estimate</button></div>
+      </div>
+      <div id="val_out" class="help" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h4 style="margin:0 0 8px">Contact Info</h4>
+      <div class="formGrid">
+        <input type="hidden" id="s_role" value="seller"/>
+        <div><label>First name</label><input id="s_fn"></div>
+        <div><label>Last name</label><input id="s_ln"></div>
+        <div><label>Email</label><input id="s_email" type="email"></div>
+        <div><label>Phone</label><input id="s_phone"></div>
+        <div><label>Timeline</label>
+          <select id="s_tl"><option value="">Select…</option><option>0-3</option><option>3-6</option><option>6-12</option><option>12+</option></select>
+        </div>
+        <div class="full help">
+          <label><input type="checkbox" id="s_sms"> I agree to receive SMS</label> ·
+          <label><input type="checkbox" id="s_em" checked> I agree to receive email</label>
+        </div>
+        <div class="full"><button class="primary" onclick="submitSeller()">Request In-Person Valuation</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUY -->
+  <section id="buy" class="hidden">
+    <div class="card">
+      <h3 style="margin-top:0">Find Your Next Home</h3>
+      <div class="formGrid">
+        <input type="hidden" id="b_role" value="buyer"/>
+        <div><label>ZIP</label><input id="b_zip" placeholder="20774"></div>
+        <div>
+          <label>County</label>
+          <select id="b_county">
+            <option value="">Select…</option>
+            <option>Prince George’s</option><option>Calvert</option><option>St. Mary's</option>
+            <option>Charles</option><option>Anne Arundel</option><option>Montgomery</option><option>Howard</option>
+          </select>
+        </div>
+        <div><label>Beds</label><input id="b_beds" type="number" min="0" step="1"></div>
+        <div><label>Baths</label><input id="b_baths" type="number" min="0" step="0.5"></div>
+        <div><label>Price Min</label><input id="b_min" type="number" min="0" step="1000"></div>
+        <div><label>Price Max</label><input id="b_max" type="number" min="0" step="1000"></div>
+        <div><label>First name</label><input id="b_fn"></div>
+        <div><label>Last name</label><input id="b_ln"></div>
+        <div><label>Email</label><input id="b_email" type="email"></div>
+        <div><label>Phone</label><input id="b_phone"></div>
+        <div><label>Timeline</label>
+          <select id="b_tl"><option value="">Select…</option><option>0-3</option><option>3-6</option><option>6-12</option><option>12+</option></select>
+        </div>
+        <div class="full help">
+          <label><input type="checkbox" id="b_sms"> I agree to receive SMS</label> ·
+          <label><input type="checkbox" id="b_em" checked> I agree to receive email</label>
+        </div>
+        <div class="full"><button class="primary" onclick="submitBuyer()">Create Saved Search</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DASH -->
+  <section id="dash" class="hidden">
+    <div class="card">
+      <div class="formGrid">
+        <div><label>Search</label><input id="q" placeholder="Name, email, tag…"/></div>
+        <div><label>Role</label><select id="r"><option value="">All</option><option>seller</option><option>buyer</option></select></div>
+        <div><label>Stage</label><select id="st"><option value="">All Stages</option><option>New</option><option>Contacted</option><option>Qualified</option><option>Appointment</option><option>Agreement</option><option>Closed/Lost</option></select></div>
+        <div class="full"><button class="primary" onclick="loadLeads()">Refresh</button></div>
+      </div>
+      <div id="tbl" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="admin" class="hidden">
+    <div class="card">
+      <h3 style="margin:0 0 10px">ZIP $/sqft</h3>
+      <div class="formGrid">
+        <div><label>ZIP (5 digits)</label><input id="azip" placeholder="20774"></div>
+        <div><label>$/sqft</label><input id="apps" type="number" step="1" placeholder="270"></div>
+        <div class="full"><button class="primary" onclick="savePPSF()">Save ZIP</button></div>
+        <div class="full">
+          <label>Bulk JSON</label>
+          <textarea id="bulk" rows="6" class="mono" placeholder='[{"zip":"20774","ppsf":270}]'></textarea>
+          <div style="margin-top:8px"><button class="primary" onclick="bulkPPSF()">Import Bulk</button></div>
+        </div>
+        <div id="ppsf_table" class="full" style="margin-top:6px"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">© Samson Properties · Equal Housing Opportunity · Privacy-first lead capture</div>
+</div>
 
 <script>
 const urlParams = new URLSearchParams(window.location.search);
 const ADMIN = urlParams.get('admin');
 if (ADMIN){ document.querySelectorAll('.admin-tab').forEach(e=>e.classList.remove('hidden')); }
 
-document.querySelectorAll('.tab').forEach(b=>{
-  b.addEventListener('click',()=>{
-    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-    document.querySelectorAll('section').forEach(x=>x.classList.add('hidden'));
-    b.classList.add('active'); document.getElementById(b.dataset.tab).classList.remove('hidden');
-    if (b.dataset.tab==='dash') loadLeads();
-    if (b.dataset.tab==='admin') loadPPSF();
-  });
-});
+function openTab(id){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('section').forEach(x=>x.classList.add('hidden'));
+  document.querySelector(`.tab[data-tab="${id}"]`)?.classList.add('active');
+  document.getElementById(id).classList.remove('hidden');
+  if (id==='dash') loadLeads();
+  if (id==='admin') loadPPSF();
+}
+document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>openTab(btn.dataset.tab)));
 
 function val(id){ const n=document.getElementById(id); return n ? n.value : ""; }
 function num(id){ const v=val(id); return v?Number(v):null; }
@@ -404,7 +512,7 @@ async function heroStart(){
   document.getElementById('s_addr').value = val('hero_addr');
   document.getElementById('s_zip').value  = val('hero_zip');
   const sc = document.getElementById('s_county'); if (sc) sc.value = val('hero_county');
-  document.querySelector('.tab[data-tab="sell"]').click();
+  openTab('sell');
   const out=document.getElementById('hero_result'); out.textContent='...';
   try{
     const payload = { zip_code: val('hero_zip'), beds: null, baths: null, sqft: null, condition: null, county: val('hero_county') || null };
@@ -516,7 +624,9 @@ async function bulkPPSF(){
   }catch(e){ alert('Import failed.'); }
 }
 </script>
-</div></body></html>"""
+</body>
+</html>"""
+
 
 @app.get("/", response_class=HTMLResponse)
 def index():
