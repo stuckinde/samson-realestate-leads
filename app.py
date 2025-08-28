@@ -261,124 +261,134 @@ n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0
     return "\n".join(parts)
 
 HTML = """<!doctype html>
-<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Samson Properties • PG County Home Values & Leads</title>
-<meta name="description" content="Instant home value estimates, buyer intake, and a simple CRM for Samson Properties (Prince George’s County).">
-<style>
-:root{--bg:#0b0f1a;--card:#0f1733;--muted:#9aa4b2;--primary:#c9a227;--accent:#7fb4ff;--text:#f4f7ff}
-*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Arial;background:radial-gradient(1200px 600px at 20% -10%, #1a245a 0%, #090e20 60%), #090e20;color:var(--text)}
-.container{max-width:1100px;margin:0 auto;padding:24px}
-header .brand{display:flex;align-items:center;gap:12px}
-.logo{width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#f6e8b1);display:flex;align-items:center;justify-content:center;color:#0b0f1a;font-weight:800;box-shadow:0 8px 28px rgba(201,162,39,.35)}
-h1{margin:0;font-size:28px} .tag{color:var(--muted)}
-.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;align-items:center;margin-top:18px}
-.hero-card{background:linear-gradient(180deg,#101a3f,#0b1330);border:1px solid #2a3565;border-radius:18px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-.hero h2{font-size:30px;margin:0 0 8px}
-.hero ul{margin:8px 0 0 18px}
-.ctas{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-.cta{background:linear-gradient(90deg,var(--primary),var(--accent));color:#0b1020;padding:10px 16px;border-radius:12px;border:none;cursor:pointer;font-weight:700}
-.card{background:var(--card);border:1px solid #2a3565;border-radius:16px;padding:16px;box-shadow:0 8px 28px rgba(0,0,0,.25);margin:12px 0}
-.tabs{display:flex;gap:10px;margin:16px 0 20px}
-.tab{background:transparent;border:1px solid #2a3565;color:var(--text);padding:8px 14px;border-radius:10px;cursor:pointer}
-.tab.active,.tab:hover{background:#1b254b}
-.tab-pane{display:none}.tab-pane.active{display:block}
-.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.form-grid .full{grid-column:1/-1}
-label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-input,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid #2a3565;background:#0f1733;color:var(--text)}
-button{cursor:pointer;background:linear-gradient(90deg,var(--primary),var(--accent));color:#0b1020;font-weight:600;border:none}
-.table{width:100%;border-collapse:collapse}
-.table th,.table td{border-bottom:1px solid #2a3565;padding:8px;text-align:left;font-size:14px}
-.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#273165;color:var(--text);font-size:12px}
-footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
-.hidden{display:none}
-.testimonials{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.quote{background:#0d1330;border:1px solid #2a3565;border-radius:12px;padding:12px;font-size:14px}
-.admin-only{display:none}
-</style>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Samson Properties • Leads</title>
 </head>
 <body>
-<div class="container">
-<header>
-  <div class="brand"><div class="logo">SP</div>
-    <div><h1>Samson Properties — Prince George’s County</h1><div class="tag">Instant valuations • Buyer intake • Simple CRM</div></div>
-  </div>
-</header>
+  <h2>Samson Properties — Lead Capture (PG County)</h2>
 
-<section class="hero">
-  <div class="hero-card">
-    <h2>Curious what your PG County home is worth?</h2>
-    <p>Get an instant estimate and a tailored pricing plan—no obligation.</p>
-    <ul>
-      <li>Local comps + condition adjustment</li>
-      <li>PG County neighborhoods & ZIPs baked in</li>
-      <li>Free expert walkthrough after you submit</li>
-    </ul>
-    <div class="ctas">
-      <button class="cta" onclick="openTab('sell')">Get My Home Value</button>
-      <button class="cta" onclick="openTab('buy')">Find Homes</button>
-    </div>
-  </div>
+  <h3>Seller</h3>
+  <form onsubmit="submitSeller(); return false;">
+    <input id="s_addr" placeholder="Address" required>
+    <input id="s_zip" placeholder="ZIP" required>
+    <input id="s_beds" type="number" placeholder="Beds">
+    <input id="s_baths" type="number" step="0.5" placeholder="Baths">
+    <input id="s_sqft" type="number" placeholder="Sq Ft">
+    <select id="s_cond">
+      <option value="">Condition…</option>
+      <option>Needs work</option><option>Average</option><option>Updated</option><option>Renovated</option>
+    </select>
+    <br>
+    <input id="s_fn" placeholder="First name"><input id="s_ln" placeholder="Last name">
+    <input id="s_email" type="email" placeholder="Email"><input id="s_phone" placeholder="Phone">
+    <select id="s_tl">
+      <option value="">Timeline…</option><option>0-3</option><option>3-6</option><option>6-12</option><option>12+</option>
+    </select>
+    <label><input type="checkbox" id="s_sms"> SMS OK</label>
+    <label><input type="checkbox" id="s_em" checked> Email OK</label>
+    <button type="button" onclick="doVal()">Get Instant Estimate</button>
+    <div id="val_out"></div>
+    <button type="submit">Request In-Person Valuation</button>
+  </form>
+
+  <h3>Buyer</h3>
+  <form onsubmit="submitBuyer(); return false;">
+    <input id="b_zip" placeholder="ZIP">
+    <input id="b_beds" type="number" placeholder="Beds">
+    <input id="b_baths" type="number" step="0.5" placeholder="Baths">
+    <input id="b_min" type="number" placeholder="Price Min">
+    <input id="b_max" type="number" placeholder="Price Max">
+    <input id="b_fn" placeholder="First name"><input id="b_ln" placeholder="Last name">
+    <input id="b_email" type="email" placeholder="Email"><input id="b_phone" placeholder="Phone">
+    <select id="b_tl">
+      <option value="">Timeline…</option><option>0-3</option><option>3-6</option><option>6-12</option><option>12+</option>
+    </select>
+    <label><input type="checkbox" id="b_sms"> SMS OK</label>
+    <label><input type="checkbox" id="b_em" checked> Email OK</label>
+    <button type="submit">Create Saved Search</button>
+  </form>
+
+  <h3>Dashboard (admin only)</h3>
   <div>
-    <div class="testimonials">
-      <div class="quote">“Sold over asking in 6 days. Seamless.” — A. Johnson</div>
-      <div class="quote">“Accurate estimate and a clear plan.” — D. Morgan</div>
-      <div class="quote">“Professional and responsive—highly recommend.” — K. Lee</div>
-    </div>
+    <input id="q" placeholder="Search…">
+    <select id="r"><option value="">All</option><option>seller</option><option>buyer</option></select>
+    <select id="st"><option value="">All Stages</option><option>New</option><option>Contacted</option><option>Qualified</option><option>Appointment</option><option>Agreement</option><option>Closed/Lost</option></select>
+    <button onclick="loadLeads()">Refresh</button>
   </div>
-</section>
+  <div id="tbl"></div>
 
-<nav class="tabs">
-  <button class="tab active" data-tab="sell">Sell</button>
-  <button class="tab" data-tab="buy">Buy</button>
-  <button class="tab admin-only" data-tab="dash">Dashboard</button>
-  <button class="tab admin-only" data-tab="admin">Admin</button>
-</nav>
+<script>
+async function post(url,data,admin=false){
+  const h={'Content-Type':'application/json'};
+  if (admin && ADMIN) h['X-Admin-Key']=ADMIN;
+  const r=await fetch(url,{method:'POST',headers:h,body:JSON.stringify(data)});
+  if(!r.ok) throw new Error(await r.text()); return r.json();
+}
+async function patch(url,data){
+  const h={'Content-Type':'application/json'}; if(ADMIN) h['X-Admin-Key']=ADMIN;
+  const r=await fetch(url,{method:'PATCH',headers:h,body:JSON.stringify(data)});
+  if(!r.ok) throw new Error(await r.text()); return r.json();
+}
+async function getJSON(url,admin=false){
+  const h={}; if(admin && ADMIN) h['X-Admin-Key']=ADMIN;
+  const r=await fetch(url,{headers:h}); if(!r.ok) throw new Error(await r.text()); return r.json();
+}
+function val(id){return document.getElementById(id).value}
+function num(id){const v=val(id); return v?Number(v):null}
 
-<section id="sell" class="tab-pane active">
-  <h2>What's My Home Worth?</h2>
-  <div class="card">
-    <div class="form-grid">
-      <div><label>Address</label><input id="s_addr" placeholder="123 Main St"></div>
-      <div><label>ZIP</label><input id="s_zip" placeholder="20774"></div>
-      <div><label>Beds</label><input id="s_beds" type="number" min="0" step="1"></div>
-      <div><label>Baths</label><input id="s_baths" type="number" min="0" step="0.5"></div>
-      <div><label>Sq Ft</label><input id="s_sqft" type="number" min="300" step="10"></div>
-      <div><label>Condition</label>
-        <select id="s_cond">
-          <option value="">Select…</option>
-          <option>Needs work</option><option>Average</option><option>Updated</option><option>Renovated</option>
+const urlParams = new URLSearchParams(window.location.search);
+const ADMIN = urlParams.get('admin');
+
+async function doVal(){
+  const payload={zip_code:val('s_zip'), beds:num('s_beds'), baths:num('s_baths'), sqft:num('s_sqft'), condition:val('s_cond')||null};
+  const out=document.getElementById('val_out'); out.textContent='...';
+  try{ const resp=await post('/api/valuation',payload); const v=resp.valuation;
+    out.innerHTML = `Estimated: $${v.estimate.toLocaleString()} (range $${v.low.toLocaleString()}–$${v.high.toLocaleString()})`;
+  }catch(e){ out.textContent='Could not compute estimate'; }
+}
+async function submitSeller(){
+  const payload={
+    role:'seller', first_name:val('s_fn'), last_name:val('s_ln'), email:val('s_email'), phone:val('s_phone'),
+    address:val('s_addr'), zip_code:val('s_zip'), beds:num('s_beds'), baths:num('s_baths'), sqft:num('s_sqft'),
+    condition:val('s_cond')||null, timeline:val('s_tl'),
+    consent_sms:document.getElementById('s_sms').checked, consent_email:document.getElementById('s_em').checked
+  };
+  try{ await post('/api/leads',payload); alert('Thanks! We will contact you shortly.'); } catch(e){ alert('Could not submit.'); }
+}
+async function submitBuyer(){
+  const payload={
+    role:'buyer', first_name:val('b_fn'), last_name:val('b_ln'), email:val('b_email'), phone:val('b_phone'),
+    zip_code:val('b_zip'), beds:num('b_beds'), baths:num('b_baths'),
+    price_min:num('b_min'), price_max:num('b_max'),
+    timeline:val('b_tl'), consent_sms:document.getElementById('b_sms').checked, consent_email:document.getElementById('b_em').checked
+  };
+  try{ await post('/api/leads',payload); alert('Saved! We’ll send property alerts (demo).'); } catch(e){ alert('Could not submit.'); }
+}
+async function loadLeads(){
+  const p=new URLSearchParams(); if(val('q')) p.set('q',val('q')); if(val('r')) p.set('role',val('r')); if(val('st')) p.set('stage',val('st'));
+  const d=await getJSON('/api/leads?'+p.toString(), true);
+  const T=document.getElementById('tbl');
+  const rows = d.items.map(ld=>`
+    <tr>
+      <td>${ld.role}</td>
+      <td><b>${(ld.first_name||'')+' '+(ld.last_name||'')}</b> — ${(ld.email||'')} ${(ld.phone?' · '+ld.phone:'')}</td>
+      <td>${(ld.address||'')+' '+(ld.zip_code||'')}</td>
+      <td>${ld.timeline||'—'}</td>
+      <td>${ld.score||0}</td>
+      <td>
+        <select data-id="${ld.id}" class="stPick">
+          ${['New','Contacted','Qualified','Appointment','Agreement','Closed/Lost'].map(s=>`<option ${s===ld.stage?'selected':''}>${s}</option>`).join('')}
         </select>
-      </div>
-      <div class="full"><button onclick="doVal()">Get Instant Estimate</button></div>
-    </div>
-    <div id="val_out" class="tag" style="margin-top:8px"></div>
-  </div>
-
-  <h3>Contact Info</h3>
-  <div class="card form-grid">
-    <input type="hidden" id="s_role" value="seller"/>
-    <div><label>First Name</label><input id="s_fn"></div>
-    <div><label>Last Name</label><input id="s_ln"></div>
-    <div><label>Email</label><input id="s_email" type="email"></div>
-    <div><label>Phone</label><input id="s_phone"></div>
-    <div><label>Timeline</label>
-      <select id="s_tl"><option value="">Select…</option><option>0-3</option><option>3-6</option><option>6-12</option><option>12+</option></select>
-    </div>
-    <div class="full"><label><input type="checkbox" id="s_sms"> I agree to receive SMS</label> ·
-      <label><input type="checkbox" id="s_em" checked> I agree to receive email</label>
-    </div>
-    <div class="full"><button onclick="submitSeller()">Request In-Person Valuation</button></div>
-  </div>
-</section>
-
-<section id="buy" class="tab-pane">
-  <h2>Find Your Next Home</h2>
-  <div class="card form-grid">
-    <input type="hidden" id="b_role" value="buyer"/>
-    <div><label>ZIP</label><input id="b_zip" placeholder="20774"></div>
-    <div><label>Beds</label><input id="b_beds" type="number" m_
-
+      </td>
+    </tr>`).join('');
+  T.innerHTML = `<table border="1" cellpadding="6"><thead><tr><th>Role</th><th>Lead</th><th>Location</th><th>Timeline</th><th>Score</th><th>Stage</th></tr></thead><tbody>${rows||'<tr><td colspan=6>No leads yet.</td></tr>'}</tbody></table>`;
+  document.querySelectorAll('.stPick').forEach(sel=>{
+    sel.addEventListener('change', async e=>{ await patch('/api/leads/'+e.target.getAttribute('data-id'), {stage:e.target.value}); loadLeads(); });
+  });
+}
 </script>
 </body></html>
 """
@@ -387,4 +397,3 @@ footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
 def index():
     head = analytics_snippets()
     return HTML.replace("</head>", head + "\n</head>") if head else HTML
-
