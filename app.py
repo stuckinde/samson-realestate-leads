@@ -1,17 +1,28 @@
-# app.py — Samson Properties (PG County) one-file MVP
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+# app.py — Samson Properties (PG County) one-file MVP — enhanced
+from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlmodel import SQLModel, Field, Session, create_engine, select
-from typing import Optional
+from typing import Optional, List, Dict
 from datetime import datetime
+import os, json
 
-app = FastAPI(title="Samson Properties Lead-Gen", version="1.0")
+app = FastAPI(title="Samson Properties Lead-Gen", version="1.2")
+
+# ---------- Config / Env ----------
+ADMIN_KEY = os.getenv("ADMIN_KEY")  # set in Render to hide admin-only routes
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+NOTIFY_EMAIL = os.getenv("NOTIFY_EMAIL")
+GA_TAG = os.getenv("GA_TAG")              # e.g., G-XXXXXXX
+FB_PIXEL = os.getenv("FB_PIXEL")          # e.g., 123456789
+
+# DB path: if Render Disk mounted at /data, use it so leads persist
+DB_PATH = "sqlite:////data/app.db" if os.path.isdir("/data") else "sqlite:///app.db"
 
 # ---------- Database ----------
-engine = create_engine("sqlite:///app.db", echo=False)
+engine = create_engine(DB_PATH, echo=False)
 
 class LeadBase(SQLModel):
-    role: str
+    role: str                       # "seller" or "buyer"
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[str] = None
@@ -23,9 +34,10 @@ class LeadBase(SQLModel):
     sqft: Optional[int] = None
     price_min: Optional[int] = None
     price_max: Optional[int] = None
-    timeline: Optional[str] = None
+    timeline: Optional[str] = None  # "0-3","3-6","6-12","12+"
+    condition: Optional[str] = None # "Needs work"|"Average"|"Updated"|"Renovated"
     tags: Optional[str] = None
-    stage: str = "New"
+    stage: str = "New"              # pipeline stage
     consent_sms: bool = False
     consent_email: bool = False
     score: int = 0
@@ -35,6 +47,11 @@ class Lead(LeadBase, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
+# Store ZIP overrides in DB (editable in Admin)
+class ZipPPSF(SQLModel, table=True):
+    zip: str = Field(primary_key=True)
+    ppsf: float
+
 def init_db():
     SQLModel.metadata.create_all(engine)
 
@@ -42,8 +59,9 @@ def init_db():
 def _on_start():
     init_db()
 
-# ---------- Valuation (PG County PPSF) ----------
-PG_PPSF = {
+# ---------- Valuation ----------
+# Base Prince George’s County PPSF (seed defaults). Admin overrides can replace these.
+PG_PPSF_BASE: Dict[str, float] = {
     "20706":255, "20707":260, "20708":245, "20710":240, "20712":270,
     "20715":250, "20716":255, "20720":265, "20721":270, "20722":245,
     "20735":250, "20737":255, "20740":275, "20742":280, "20743":235,
@@ -53,16 +71,45 @@ PG_PPSF = {
 }
 DEFAULT_PPSF = 220.0
 
-def estimate_value(zip_code: Optional[str], beds: Optional[int], baths: Optional[float], sqft: Optional[int]):
-    ppsf = PG_PPSF.get(zip_code or "", DEFAULT_PPSF)
+# Cache built from base + DB overrides
+def current_ppsf_map() -> Dict[str, float]:
+    with Session(engine) as s:
+        overrides = {row.zip: row.ppsf for row in s.exec(select(ZipPPSF)).all()}
+    merged = PG_PPSF_BASE.copy()
+    merged.update(overrides)
+    return merged
+
+CONDITION_ADJ = {
+    "Needs work": -0.10,
+    "Average": 0.0,
+    "Updated": 0.05,
+    "Renovated": 0.10
+}
+
+def estimate_value(zip_code: Optional[str], beds: Optional[int], baths: Optional[float], sqft: Optional[int], condition: Optional[str]):
+    ppsf_map = current_ppsf_map()
+    ppsf = ppsf_map.get((zip_code or "").strip(), DEFAULT_PPSF)
     sqft = max(600, (sqft or 1800))
+
     adj = 1.0
     if beds:
         adj += 0.08 if beds >= 5 else 0.05 if beds == 4 else 0.02 if beds == 3 else 0
     if baths:
-        adj += 0.05 if baths >= 3 else 0.03 if baths >= 2 else 0
+        adj += 0.05 if (baths or 0) >= 3 else 0.03 if (baths or 0) >= 2 else 0
+    if condition and condition in CONDITION_ADJ:
+        adj += CONDITION_ADJ[condition]
+
     est = round(ppsf * sqft * adj)
-    return {"estimate": est, "low": int(est*0.93), "high": int(est*1.07), "ppsf_used": ppsf, "sqft_used": sqft, "adjustment": adj}
+    band = 0.05 if condition else 0.08  # tighter if condition provided
+    return {
+        "estimate": est,
+        "low": int(est * (1 - band)),
+        "high": int(est * (1 + band)),
+        "ppsf_used": ppsf,
+        "sqft_used": sqft,
+        "adjustment": round(adj, 3),
+        "band": band
+    }
 
 def compute_score(ld: Lead) -> int:
     s = 0
@@ -75,14 +122,36 @@ def compute_score(ld: Lead) -> int:
     s += {"New":0,"Contacted":5,"Qualified":10,"Appointment":20,"Agreement":30,"Closed/Lost":0}.get(ld.stage,0)
     return int(s)
 
+# ---------- Optional: Email notify via SendGrid ----------
+def notify_email(subject: str, html: str):
+    if not (SENDGRID_API_KEY and NOTIFY_EMAIL): 
+        return
+    try:
+        import requests
+        requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type":"application/json"},
+            json={
+                "personalizations":[{"to":[{"email": NOTIFY_EMAIL}]}],
+                "from":{"email":"no-reply@samsonprops-demo.com"},
+                "subject":subject,
+                "content":[{"type":"text/html","value":html}]
+            },
+            timeout=8
+        )
+    except Exception:
+        pass
+
 # ---------- API ----------
 @app.get("/api/health")
 def health():
-    return {"ok": True, "service": "samson-leads", "version": "1.0"}
+    return {"ok": True, "service": "samson-leads", "version": app.version}
 
 @app.post("/api/valuation")
 def api_valuation(payload: dict):
-    return {"ok": True, "valuation": estimate_value(payload.get("zip_code"), payload.get("beds"), payload.get("baths"), payload.get("sqft"))}
+    return {"ok": True, "valuation": estimate_value(
+        payload.get("zip_code"), payload.get("beds"), payload.get("baths"), payload.get("sqft"), payload.get("condition")
+    )}
 
 @app.post("/api/leads")
 def create_lead(payload: dict):
@@ -91,10 +160,22 @@ def create_lead(payload: dict):
         lead.updated_at = datetime.utcnow()
         lead.score = compute_score(lead)
         s.add(lead); s.commit(); s.refresh(lead)
+
+        # notify (optional)
+        notify_email(
+            subject=f"[New {lead.role.title()} Lead] {lead.first_name or ''} {lead.last_name or ''}",
+            html=f"""<h3>New {lead.role} lead</h3>
+<p><b>Name:</b> {lead.first_name} {lead.last_name}<br>
+<b>Email:</b> {lead.email} — <b>Phone:</b> {lead.phone}<br>
+<b>ZIP:</b> {lead.zip_code} — <b>Timeline:</b> {lead.timeline or '—'}<br>
+<b>Score:</b> {lead.score}</p>"""
+        )
         return {"ok": True, "lead": lead.dict()}
 
 @app.get("/api/leads")
-def list_leads(q: Optional[str] = None, role: Optional[str] = None, stage: Optional[str] = None):
+def list_leads(q: Optional[str] = None, role: Optional[str] = None, stage: Optional[str] = None, x_admin_key: Optional[str] = Header(None)):
+    if ADMIN_KEY and x_admin_key != ADMIN_KEY:
+        raise HTTPException(401, "Unauthorized")
     with Session(engine) as s:
         rows = s.exec(select(Lead)).all()
         out = []
@@ -109,7 +190,9 @@ def list_leads(q: Optional[str] = None, role: Optional[str] = None, stage: Optio
         return {"ok": True, "items": out}
 
 @app.patch("/api/leads/{lead_id}")
-def update_lead(lead_id: int, payload: dict):
+def update_lead(lead_id: int, payload: dict, x_admin_key: Optional[str] = Header(None)):
+    if ADMIN_KEY and x_admin_key != ADMIN_KEY:
+        raise HTTPException(401, "Unauthorized")
     with Session(engine) as s:
         ld = s.get(Lead, lead_id)
         if not ld: raise HTTPException(404, "Lead not found")
@@ -120,17 +203,80 @@ def update_lead(lead_id: int, payload: dict):
         s.add(ld); s.commit(); s.refresh(ld)
         return {"ok": True, "lead": ld.dict()}
 
-# ---------- UI ----------
+# ----- Admin: PPSF overrides -----
+def require_admin(x_admin_key: Optional[str]):
+    if ADMIN_KEY and x_admin_key != ADMIN_KEY:
+        raise HTTPException(401, "Unauthorized")
+
+@app.get("/api/admin/ppsf")
+def admin_get_ppsf(x_admin_key: Optional[str] = Header(None)):
+    require_admin(x_admin_key)
+    data = current_ppsf_map()
+    with Session(engine) as s:
+        overrides = {row.zip: row.ppsf for row in s.exec(select(ZipPPSF)).all()}
+    return {"ok": True, "ppsf": data, "overrides": overrides}
+
+@app.post("/api/admin/ppsf")
+def admin_set_ppsf(item: dict, x_admin_key: Optional[str] = Header(None)):
+    require_admin(x_admin_key)
+    z = (item.get("zip") or "").strip()
+    p = float(item.get("ppsf"))
+    if not z or len(z) != 5:
+        raise HTTPException(400, "zip required (5 digits)")
+    with Session(engine) as s:
+        row = s.get(ZipPPSF, z)
+        if row: row.ppsf = p
+        else: row = ZipPPSF(zip=z, ppsf=p); s.add(row)
+        s.commit()
+    return {"ok": True, "zip": z, "ppsf": p}
+
+@app.post("/api/admin/ppsf/bulk")
+def admin_set_ppsf_bulk(items: List[dict], x_admin_key: Optional[str] = Header(None)):
+    require_admin(x_admin_key)
+    with Session(engine) as s:
+        for it in items:
+            try:
+                z = (str(it.get("zip"))).strip()
+                p = float(it.get("ppsf"))
+                if len(z) == 5:
+                    row = s.get(ZipPPSF, z)
+                    if row: row.ppsf = p
+                    else: s.add(ZipPPSF(zip=z, ppsf=p))
+            except Exception:
+                continue
+        s.commit()
+    return {"ok": True, "count": len(items)}
+
+# ---------- UI (Landing + App + Admin) ----------
+def analytics_snippets() -> str:
+    parts = []
+    if GA_TAG:
+        parts.append(f"""<script async src="https://www.googletagmanager.com/gtag/js?id={GA_TAG}"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}gtag('js',new Date());gtag('config','{GA_TAG}');</script>""")
+    if FB_PIXEL:
+        parts.append(f"""<script>!function(f,b,e,v,n,t,s){{if(f.fbq)return;n=f.fbq=function(){{n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)}};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}}
+(window, document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','{FB_PIXEL}');fbq('track','PageView');</script>""")
+    return "\n".join(parts)
+
 HTML = """<!doctype html>
 <html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Samson Properties • Leads</title>
+<title>Samson Properties • PG County Home Values & Leads</title>
+<meta name="description" content="Instant home value estimates, buyer intake, and a simple CRM for Samson Properties (Prince George’s County).">
 <style>
-:root{--bg:#0b0f1a;--card:#111827;--muted:#9aa4b2;--primary:#c9a227;--accent:#7fb4ff;--text:#f4f7ff}
-*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#0b0f1a,#0d1330);color:var(--text)}
+:root{--bg:#0b0f1a;--card:#0f1733;--muted:#9aa4b2;--primary:#c9a227;--accent:#7fb4ff;--text:#f4f7ff}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Arial;background:radial-gradient(1200px 600px at 20% -10%, #1a245a 0%, #090e20 60%), #090e20;color:var(--text)}
 .container{max-width:1100px;margin:0 auto;padding:24px}
 header .brand{display:flex;align-items:center;gap:12px}
-.logo{width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#f6e8b1);display:flex;align-items:center;justify-content:center;color:#0b0f1a;font-weight:800}
-h1{margin:0;font-size:26px} .tag{color:var(--muted)}
+.logo{width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#f6e8b1);display:flex;align-items:center;justify-content:center;color:#0b0f1a;font-weight:800;box-shadow:0 8px 28px rgba(201,162,39,.35)}
+h1{margin:0;font-size:28px} .tag{color:var(--muted)}
+.hero{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;align-items:center;margin-top:18px}
+.hero-card{background:linear-gradient(180deg,#101a3f,#0b1330);border:1px solid #2a3565;border-radius:18px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.hero h2{font-size:30px;margin:0 0 8px}
+.hero ul{margin:8px 0 0 18px}
+.ctas{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.cta{background:linear-gradient(90deg,var(--primary),var(--accent));color:#0b1020;padding:10px 16px;border-radius:12px;border:none;cursor:pointer;font-weight:700}
 .card{background:var(--card);border:1px solid #2a3565;border-radius:16px;padding:16px;box-shadow:0 8px 28px rgba(0,0,0,.25);margin:12px 0}
 .tabs{display:flex;gap:10px;margin:16px 0 20px}
 .tab{background:transparent;border:1px solid #2a3565;color:var(--text);padding:8px 14px;border-radius:10px;cursor:pointer}
@@ -146,20 +292,47 @@ button{cursor:pointer;background:linear-gradient(90deg,var(--primary),var(--acce
 .badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#273165;color:var(--text);font-size:12px}
 footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
 .hidden{display:none}
+.testimonials{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.quote{background:#0d1330;border:1px solid #2a3565;border-radius:12px;padding:12px;font-size:14px}
+.admin-only{display:none}
 </style>
 </head>
 <body>
 <div class="container">
 <header>
   <div class="brand"><div class="logo">SP</div>
-    <div><h1>Samson Properties</h1><div class="tag">Seller-first capture • Buyer search • Simple CRM</div></div>
+    <div><h1>Samson Properties — Prince George’s County</h1><div class="tag">Instant valuations • Buyer intake • Simple CRM</div></div>
   </div>
 </header>
+
+<section class="hero">
+  <div class="hero-card">
+    <h2>Curious what your PG County home is worth?</h2>
+    <p>Get an instant estimate and a tailored pricing plan—no obligation.</p>
+    <ul>
+      <li>Local comps + condition adjustment</li>
+      <li>PG County neighborhoods & ZIPs baked in</li>
+      <li>Free expert walkthrough after you submit</li>
+    </ul>
+    <div class="ctas">
+      <button class="cta" onclick="openTab('sell')">Get My Home Value</button>
+      <button class="cta" onclick="openTab('buy')">Find Homes</button>
+    </div>
+  </div>
+  <div>
+    <div class="testimonials">
+      <div class="quote">“Sold over asking in 6 days. Seamless.” — A. Johnson</div>
+      <div class="quote">“Accurate estimate and a clear plan.” — D. Morgan</div>
+      <div class="quote">“Professional and responsive—highly recommend.” — K. Lee</div>
+    </div>
+  </div>
+</section>
 
 <nav class="tabs">
   <button class="tab active" data-tab="sell">Sell</button>
   <button class="tab" data-tab="buy">Buy</button>
-  <button class="tab" data-tab="dash">Dashboard</button>
+  <button class="tab admin-only" data-tab="dash">Dashboard</button>
+  <button class="tab admin-only" data-tab="admin">Admin</button>
 </nav>
 
 <section id="sell" class="tab-pane active">
@@ -171,6 +344,12 @@ footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
       <div><label>Beds</label><input id="s_beds" type="number" min="0" step="1"></div>
       <div><label>Baths</label><input id="s_baths" type="number" min="0" step="0.5"></div>
       <div><label>Sq Ft</label><input id="s_sqft" type="number" min="300" step="10"></div>
+      <div><label>Condition</label>
+        <select id="s_cond">
+          <option value="">Select…</option>
+          <option>Needs work</option><option>Average</option><option>Updated</option><option>Renovated</option>
+        </select>
+      </div>
       <div class="full"><button onclick="doVal()">Get Instant Estimate</button></div>
     </div>
     <div id="val_out" class="tag" style="margin-top:8px"></div>
@@ -198,100 +377,7 @@ footer{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
   <div class="card form-grid">
     <input type="hidden" id="b_role" value="buyer"/>
     <div><label>ZIP</label><input id="b_zip" placeholder="20774"></div>
-    <div><label>Beds</label><input id="b_beds" type="number" min="0" step="1"></div>
-    <div><label>Baths</label><input id="b_baths" type="number" min="0" step="0.5"></div>
-    <div><label>Price Min</label><input id="b_min" type="number" step="1000"></div>
-    <div><label>Price Max</label><input id="b_max" type="number" step="1000"></div>
-    <div><label>First Name</label><input id="b_fn"></div>
-    <div><label>Last Name</label><input id="b_ln"></div>
-    <div><label>Email</label><input id="b_email" type="email"></div>
-    <div><label>Phone</label><input id="b_phone"></div>
-    <div><label>Timeline</label>
-      <select id="b_tl"><option value="">Select…</option><option>0-3</option><option>3-6</option><option>6-12</option><option>12+</option></select>
-    </div>
-    <div class="full"><label><input type="checkbox" id="b_sms"> I agree to receive SMS</label> ·
-      <label><input type="checkbox" id="b_em" checked> I agree to receive email</label>
-    </div>
-    <div class="full"><button onclick="submitBuyer()">Create Saved Search</button></div>
-  </div>
-</section>
+    <div><label>Beds</label><input id="b_beds" type="number" m_
 
-<section id="dash" class="tab-pane">
-  <h2>Leads Dashboard</h2>
-  <div class="card">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      <input id="q" placeholder="Search…"/>
-      <select id="r"><option value="">All</option><option>seller</option><option>buyer</option></select>
-      <select id="st"><option value="">All Stages</option><option>New</option><option>Contacted</option><option>Qualified</option><option>Appointment</option><option>Agreement</option><option>Closed/Lost</option></select>
-      <button onclick="loadLeads()">Refresh</button>
-    </div>
-    <div id="tbl"></div>
-  </div>
-</section>
-
-<footer class="card" style="text-align:center">
-  © Samson Properties • Equal Housing Opportunity • Demo only
-</footer>
-</div>
-
-<script>
-document.querySelectorAll('.tab').forEach(b=>{
-  b.addEventListener('click',()=>{
-    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active'); document.getElementById(b.dataset.tab).classList.add('active');
-    if (b.dataset.tab==='dash') loadLeads();
-  });
-});
-async function post(url,data){ const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); if(!r.ok) throw new Error('req failed'); return r.json(); }
-async function patch(url,data){ const r=await fetch(url,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); if(!r.ok) throw new Error('req failed'); return r.json(); }
-function val(id){return document.getElementById(id).value}
-function num(id){const v=val(id); return v?Number(v):null}
-async function doVal(){
-  const payload={zip_code:val('s_zip'), beds:num('s_beds'), baths:num('s_baths'), sqft:num('s_sqft')};
-  const out=document.getElementById('val_out'); out.textContent='...';
-  try{ const resp=await post('/api/valuation',payload); const v=resp.valuation;
-    out.innerHTML = `<b>Estimated:</b> $${v.estimate.toLocaleString()} <span class="badge">range: $${v.low.toLocaleString()} – $${v.high.toLocaleString()}</span><br>
-    <span class="tag">Using $${v.ppsf_used}/sqft × ${v.sqft_used} sqft (adj ${v.adjustment}).</span>`;
-  }catch(e){ out.textContent='Could not compute estimate'; }
-}
-async function submitSeller(){
-  const payload={role:'seller', first_name:val('s_fn'), last_name:val('s_ln'), email:val('s_email'), phone:val('s_phone'),
-    address:val('s_addr'), zip_code:val('s_zip'), beds:num('s_beds'), baths:num('s_baths'), sqft:num('s_sqft'),
-    timeline:val('s_tl'), consent_sms:document.getElementById('s_sms').checked, consent_email:document.getElementById('s_em').checked};
-  try{ await post('/api/leads',payload); alert('Thanks! We will contact you shortly.'); } catch(e){ alert('Could not submit.'); }
-}
-async function submitBuyer(){
-  const payload={role:'buyer', first_name:val('b_fn'), last_name:val('b_ln'), email:val('b_email'), phone:val('b_phone'),
-    zip_code:val('b_zip'), beds:num('b_beds'), baths:num('b_baths'), price_min:num('b_min'), price_max:num('b_max'),
-    timeline:val('b_tl'), consent_sms:document.getElementById('b_sms').checked, consent_email:document.getElementById('b_em').checked};
-  try{ await post('/api/leads',payload); alert('Saved! We’ll send property alerts (demo).'); } catch(e){ alert('Could not submit.'); }
-}
-async function loadLeads(){
-  const p=new URLSearchParams(); if(val('q')) p.set('q',val('q')); if(val('r')) p.set('role',val('r')); if(val('st')) p.set('stage',val('st'));
-  const r=await fetch('/api/leads?'+p.toString()); const d=await r.json(); const T=document.getElementById('tbl');
-  const rows = d.items.map(ld=>`
-    <tr>
-      <td><span class="badge">${ld.role}</span></td>
-      <td><b>${(ld.first_name||'')+' '+(ld.last_name||'')}</b><br><span class="tag">${(ld.email||'')+' · '+(ld.phone||'')}</span></td>
-      <td>${(ld.address||'')+' '+(ld.zip_code||'')}</td>
-      <td>${ld.timeline||'—'}</td>
-      <td>${ld.score||0}</td>
-      <td>
-        <select data-id="${ld.id}" class="stPick">
-          ${['New','Contacted','Qualified','Appointment','Agreement','Closed/Lost'].map(s=>`<option ${s===ld.stage?'selected':''}>${s}</option>`).join('')}
-        </select>
-      </td>
-    </tr>`).join('');
-  T.innerHTML = `<table class="table"><thead><tr><th>Role</th><th>Lead</th><th>Location</th><th>Timeline</th><th>Score</th><th>Stage</th></tr></thead><tbody>${rows||'<tr><td colspan=6>No leads yet.</td></tr>'}</tbody></table>`;
-  document.querySelectorAll('.stPick').forEach(sel=>{
-    sel.addEventListener('change', async e=>{ await patch('/api/leads/'+e.target.getAttribute('data-id'), {stage:e.target.value}); loadLeads(); });
-  });
-}
-</script>
-</body></html>
-"""
-
-@app.get("/", response_class=HTMLResponse)
 def index():
     return HTML
